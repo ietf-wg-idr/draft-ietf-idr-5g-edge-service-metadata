@@ -399,7 +399,7 @@
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      |A| NLRI-cnt    |      AFI                      |  SAFI         |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |              AFI              |    SAFI       |     ..   ~
+     |              AFI              |    SAFI       |     ..        ~
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+		  
 		]]></artwork>
         </figure>
@@ -1131,6 +1131,9 @@
     +=======+======================================+=================+
     |  TBD1 |      Metadata Path Attribute         | [this document] |
     +-------+--------------------------------------+-----------------+ 
+	|  TBD2 |    Metadata Capability in BGP OPEN   | [This document] |
+    +-------+--------------------------------------+-----------------+ 
+	
 	]]></artwork>
       </section>
 
@@ -1457,51 +1460,20 @@ Cost-i=min(w *(----------------) + (1-w) *(------------------))
 	attribute, how such routes compare vs. routes that DO NOT contain it.
 	Also, this is a strong piece of normative behavior and needs to be in
 	the main part of the document.-->
-      <section title="Integrating with BGP decision process">
-        <t>When an ingress router receives BGP UPDATE messages for the same IP prefix from different egress routers, each egress router's loopback address is considered as a potential next hop for that IP prefix. For services that are configured to be influenced by the edge service Metadata, the ingress router's BGP decision process is modified to include service-specific criteria, such as the Capacity Availability Index, Site Preference, and Service Delay Prediction Index, in addition to traditional BGP attributes (e.g., Weight, Local Preference, Origin, and MED).</t>
-		
-		<t>One option is to apply the service metrics after the standard BGP decision process evaluates the traditional attributes. While the detailed algorithms may vary depending on the deployment, as illustrated in Section B.2, the basic logic works as follows:</t>
+      <section title="Integrating with BGP Route Selection">
+        <t>Not all metadata attributes specified in this document are intended for use in every deployment. Each deployment may choose to consider only a subset of the available metadata attributes based on its specific service requirements.</t>
+		<t> - Deployment-Specific Attribute Selection:</t>
+		<t>A deployment may prioritize only certain metadata attributes relevant to its operational needs. For example, one deployment might only use the Service Delay Prediction Index for latency-sensitive applications, while another might focus solely on the Capacity Availability Index to manage resource availability.</t>
+		<t> - Influence on BGP Decision Process:</t>
+		<t>The edge service Metadata influences next-hop selection differently from traditional BGP metrics (e.g., Local Preference, MED). Unlike a general next-hop metric that can affect many routes, edge service Metadata selectively impacts optimal next-hop selection for specific routes configured to consider these service-specific attributes. This targeted influence allows for optimized path selection without disrupting broader route decisions.</t>
+		<t> - Handling Degraded Metrics (Policy-Based):</t>
+		<t>If a service-specific metric degrades beyond a configured threshold (e.g., the Service Delay Prediction Index exceeds an acceptable delay threshold or the Capacity Availability Index drops below a required level), the ingress router will treat that route as ineligible for traffic steering. This is similar to a BGP route withdrawal, where the degraded route is deprioritized or ignored, even if traditional BGP attributes would otherwise favor it. This ensures that traffic is directed only to service instances that meet the defined performance criteria.</t>
+		<t> - Fallback to Non-Metadata Routes:</t>
+		<t>If no suitable routes with the required metadata are available, the BGP decision process defaults to traditional attribute evaluation [RFC 4271], ensuring consistent routing even when metadata-specific paths are absent.</t>
 
-		<t>For a service request (i.e., IP destination address) from a User Equipment (UE), the ingress router may receive multiple BGP UPDATEs from different egress routers associated with the IP address. If Site A has a lower Service Delay Prediction Index but slightly higher network cost than Site B, the ingress router will combine the service and network metrics to determine the optimal route. In this case, Site A may be preferred for ultra-low latency services, even though the traditional BGP decision process would have selected Site B based solely on lower network cost.</t>
 		
-		<t>In cases where service-specific requirements are critical (such as ultra-low latency or resource availability), the service metrics take precedence over traditional BGP attributes. For example, if Site C has a lower capacity availability or higher service delay than other sites, the ingress router will deprioritize it, even if BGP attributes like Local Preference or MED suggest it as a more optimal path.</t>
-		
-		<t>If any service-specific metric (such as the Service Delay Prediction Index) for a given egress router degrades significantly, the ingress router will adjust the routing decision accordingly. If the metric reaches a critical threshold (e.g., Capacity Availability Index or Service Delay Prediction Index goes to 0), the ingress router treats the route as ineligible, similar to how BGP handles a route withdrawal. However, if the service metric degrades but remains within an acceptable range, the ingress router may continue using the route with reduced preference.</t>
-		
-		<t>Alternatively, an ingress router can  use the [IDR-CUSTOM-DECISION] approach to incorporate service metrics with traditional BGP attributes to compute the next hop of the optimal path in the forwarding plane, as shown below:</t>
-
-        <figure anchor="Metadata Influenced Decision"
-                title="Metadata Influenced Decision">
-          <artwork><![CDATA[ 
-		     BGP  Update 
-   +--------+ with Metadata    +---------------+
-   | BGP    |----------------->| EdgeServiceMgn| 
-   |Decision|< - - - - - - - - |               | 
-   +---^-|--+                  +-------|-------+ 
-       | | BGP                         | Update  
-       | | Route                       | Route Nexthops
-       | | Multi-path NH install       | with weight 
-   +---|-V--+                          |
-   |   RIB  |                          |
-   +----+---+                          |
-        |                              |
-    +---V------------------------------V-------+ 
-    |               Forwarding Plane           | 
-    |                                          | 
-    +------------------------------------------+  
-]]></artwork>
-        </figure>
-        <t>When the BGP custom decision [idr-custom-decision] is used, the
-        edge service Management function would have algorithm to combine the
-        edge service Metadata attributes with the custom decision to derive
-        the optimal next hop for the Edge service routes.</t>
-		
-        <t>The edge service Metadata influencing next hop selection is
-        different from the metric (or weight) to the next hop. The metric to a
-        next hop can impact many (sometimes, tens of thousands) routes that
-        have the node as their next hop. while as the edge service Metadata
-        only impact the optimal next hop selection for a subset of client
-        routes that are configured to be influenced by the service Metadata.</t>
+		<t>This approach provides flexibility and adaptability in routing decisions, allowing each deployment to apply relevant metadata attributes and enforce performance thresholds for improved service quality.</t>
+        
       </section>
     </section>
   </back>
