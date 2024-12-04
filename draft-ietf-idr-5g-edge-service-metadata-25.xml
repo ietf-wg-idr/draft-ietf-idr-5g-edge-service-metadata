@@ -961,8 +961,6 @@
       </section>
     </section>
 
-
-
     <section title="Service Metadata Propagation Scope">
       <t>The propagation scope of the Metadata Path Attribute needs careful consideration to ensure it does not inadvertently leak to other BGP domains. According to Section 3 of <xref target="ATTRIBUTE-ESCAPE"/>, it is necessary for the Route Reflector (RR) to be upgraded to constrain the propagation scope when propagating the metadata path attributes. Therefore, the Metadata Path Attribute originator sets the attribute as Non-transitive when sending the BGP UPDATE message to its corresponding RR. Non-transitive attributes are only guaranteed to be dropped during BGP route propagation by implementations that do not recognize them, ensuring that the metadata path attributes do not propagate beyond the intended scope.
 	  </t>
@@ -971,16 +969,16 @@
 
 	  <section title = "AS-Scope SubTLV">
 	  <t>To address the potential issue where the NO-ADVERTISE well-known community of the BGP UPDATE message can be dropped by some routers, a new AS-Scope Sub-TLV can be included in the Metadata Path Attribute to prevent the Metadata Path Attribute from being leaked to unintended Autonomous Systems (ASes). The AS-Scope Sub-TLV will enforce stricter control over the propagation of the metadata by associating it with specific AS numbers.</t>
-	          <figure anchor="AS-Scope Sub-TLV"
+	  <figure anchor="AS-Scope Sub-TLV"
                 title="AS-Scope Sub-TLV">
-          <artwork><![CDATA[ 
+       <artwork><![CDATA[ 
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |        AS-Scope Sub-Type      |   Length      | Reserved      |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
 |                         In-Scope AS-Value                     |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
-]]></artwork>
+		]]></artwork>
         </figure>
 	  <list style="hanging">
 	  <t hangText="- AS-Scope Sub-Type (16 bits):"> 7 (specified in this
@@ -1014,6 +1012,52 @@
 	  </section>
 	  
     </section>
+	<section title = "Policy Based Metadata Integration">
+	<t>This section describes how the information carried in the Metadata Path Attribute is integrated into the BGP route selection process. RR and Ingress nodes can incorporate metadata into their route selection, depending on the network deployment and local policy configuration. This flexibility ensures that service specific requirements are accounted for while maintaining network-wide consistency.</t>
+	<t>Deployment Specific Attribute Selection:</t>
+	<t>Each deployment, by the local policy, chooses the subset of available metadata attributes to use in setting the local preference for the route. This tailors the route selection process to the specific needs and policies of the network. Both RRs and Ingress nodes can selectively integrate metadata attributes into their computations based on these policies.</t>
+	
+	<t>Influence on the BGP Decision Process:</t>
+	<t> - At the Route Reflector (RR):</t>
+	<t>In deployments where RRs are responsible for pre selecting routes, the RR integrates metadata and traditional BGP attributes when determining the "best" route. The RR reflects only the selected route to its client routers (e.g., Ingress PEs). This ensures that the reflected route already aligns with service specific requirements.</t>
+	<t> - At the Ingress Node:</t>
+	<t>When the RR reflects multiple routes (e.g., using Add Paths), the Ingress node receives all candidate routes. It then integrates metadata attributes with traditional BGP attributes to compute the preference for a route. This allows the Ingress node to make service specific routing decisions based on its local policy and visibility into metadata.</t>
+	<t>Policy Driven Combined Preference Evaluation:</t>
+	<t>The preference for a route is computed based on a weighted combination of metadata attributes and traditional BGP attributes. The weights are determined by local policy:</t>
+	<list style="hanging">
+		 <t hangText="- ">Metadata and traditional BGP attributes are integrated into a single preference value using a deployment specific algorithm.</t>
+		<t hangText="- "> Either the RR or the Ingress node selects the route with the highest computed preference value for reflection or traffic steering.</t>
+	</list>
+	<t>Handling Degraded Metrics:</t>
+	<t>When critical metadata metrics, such as the Capacity Availability Index or Service Delay Prediction Index, degrade beyond a configured threshold, local BGP policy may treat the affected route as ineligible for traffic steering. This behavior is equivalent to BGP local policy declaring the route is not eligible for route selection. This ensures that traffic is not routed to service instances that not capable to process the services, preserving the quality of service for critical applications.</t>
+	<t>Example Scenarios for Policy Based Route Selection:</t>
+	<t>A BGP peer uses local policy run over the route (prefix plus attribute) to select the best route and then use tie breaking based on [RFC4271]. This section simply provides 3 examples of how local policy might weigh the Metadata metrics during that policy selection.</t>
+	<t>Scenario 1: Local Policy Prioritizes Metadata Metrics Over Traditional BGP Attributes.</t>
+	<t>The local policy assigns a higher weight to metadata metrics when computing the preference for routes. The selection process follows these steps:</t>
+	<list style="hanging"> 
+	<t hangText="- ">Compute a preference value based on the weighted combination of metadata attributes and traditional BGP attributes, with metadata metrics having higher weight.</t>
+	<t hangText="- ">Prefer the route with the highest computed preference value.</t>
+	<t hangText="- "> Resolve remaining ties using traditional BGP tie breaking criteria (e.g., eBGP over iBGP, lowest IGP metric, oldest route, lowest route ID).</t>
+	</list>
+	<t>Scenario 2: Local Policy Weighs Metadata Metrics and Traditional BGP Attributes Equally.</t>
+	<t>The local policy assigns equal weight to metadata and traditional BGP attributes during preference computation. The selection process is as follows:</t>
+	<list style="hanging"> 
+	<t hangText="- ">Compute a preference value by equally weighing metadata derived metrics and traditional BGP attributes.</t>
+	<t hangText="- ">Prefer the route with the highest computed preference value.</t>
+	<t hangText="- ">Resolve remaining ties using traditional BGP tie breaking criteria.</t>
+	</list>
+	
+	<t>Scenario 3: Local Policy Prioritizes Traditional BGP Attributes Over Metadata Metrics</t>
+	<t>The local policy assigns a higher weight to traditional BGP attributes. The selection process follows these steps:</t>
+	<list style="hanging">
+	<t hangText="- ">Compute a preference value based on the weighted combination of metadata attributes and traditional BGP attributes, with traditional attributes having higher weight.</t>
+	<t hangText="- ">Prefer the route with the highest computed preference value.</t>
+	<t hangText="- ">Resolve remaining ties using traditional BGP tie breaking criteria.</t>
+	</list>
+	<t>Equal Cost Multi Path (ECMP) in BGP Route Selection:</t>
+	<t>When the BGP decision process identifies multiple paths with equal preference after considering both Metadata Path Attributes and traditional BGP attributes, BGP can pass these paths to the forwarding engine to enable ECMP.</t>
+	<t>This Policy Based Metadata Integration approach enables network operators to incorporate Metadata Path Attributes into BGP route selection based on their specific operational goals and requirements, while maintaining compatibility with traditional BGP operations.</t>
+	</section>
 
     <section title="Minimum Interval for Metrics Change Advertisement">
 	  <t>Route Churn Considerations</t>
@@ -1295,18 +1339,6 @@
         </front>
       </reference>
 
-      <reference anchor="IDR-CUSTOM-DECISION"
-                 target="https://datatracker.ietf.org/doc/draft-ietf-idr-custom-decision/">
-        <front>
-          <title>BGP Custom Decision Process</title>
-
-          <author>
-            <organization>A. Retana, R. White</organization>
-          </author>
-
-          <date month="August" year="2017"/>
-        </front>
-      </reference>
     </references>
 	<section title = "Service Delay Prediction Based on Load Measurement">
 	  <t>When data centers detailed running status are not exposed to the
